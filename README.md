@@ -1,9 +1,5 @@
-**** 
+### EX NO:8 CONFIGURING ANALOG PORT TO INTEFACE AN ANALOG SENSOR AND READ THE VALUES USING SERIAL PORT
 
-
-### Ex. No. :8 CONFIGURING ANALOG PORT TO INTEFACE AN ANALOG SENSOR AND READ THE VALUES USING SERIAL PORT
-## Date: 
-###  
 
 ## Aim: 
 To configure ADC channel for interfacing an analog sensor and read the values on the com port 
@@ -102,6 +98,8 @@ The STM32G071RB has 2 ADCs (named ADC1 and ADC2) with a maximum sampling rate of
 With channels, it is possible to organize the conversions in a group. A group consists of a sequence of conversions that can be done on any channel and in any order, also with different sampling rates.
 
 The Analog connector of the development board is connected to pins: PA0, PA1, PA4, PB0, PC1, and PC0 of the microcontroller.
+
+
 ![image](https://github.com/vasanthkumarch/Ex.-No.8-CONFIGURING-ANALOG-PORT-TO-INTEFACE-AN-ANALOG-SENSOR-AND-READ-THE-VALUES-USING-SERIAL-PORT/assets/36288975/152f51fd-f09b-4d65-8744-9492c86f1720)
 
 Pinout of the analog connector — NUCLEO-G071RB. .
@@ -110,6 +108,7 @@ The potentiometer is wired to the PA0 pin and so the ADC1 Channel 0 (ADC1_IN0) w
 Open the Pinout&Configuration tab and click on Analog → ADC1 in the Categories section.
 In the channel 1 (IN0) dropdown menu select Single-ended.
 The ADC can be configured to measure the voltage difference between one pin and the ground (Single-ended configuration) or between two pins (Differential configuration).
+
 ![image](https://github.com/vasanthkumarch/Ex.-No.8-CONFIGURING-ANALOG-PORT-TO-INTEFACE-AN-ANALOG-SENSOR-AND-READ-THE-VALUES-USING-SERIAL-PORT/assets/36288975/84e5114c-ff8b-4058-8ad7-760bcf06f931)
 
 ADC1 mode panel.  
@@ -134,6 +133,7 @@ These sensors normally used to check volumetric water content, and another group
 
 Soil Moisture Sensor Pin Configuration
 The FC-28 soil moisture sensor includes 4-pins
+
 ![image](https://github.com/vasanthkumarch/Ex.-No.8-CONFIGURING-ANALOG-PORT-TO-INTEFACE-AN-ANALOG-SENSOR-AND-READ-THE-VALUES-USING-SERIAL-PORT/assets/36288975/14ce9ba1-6f2e-4080-adee-bfb695123d34)
 
 soil-moisture-sensor
@@ -151,16 +151,181 @@ This module also includes a potentiometer that will fix the threshold value, & t
 
 ##  Program 
 
+```
+
+#include "main.h"
+#include "string.h"
+#include <stdio.h>
+
+
+ADC_HandleTypeDef hadc1;
+UART_HandleTypeDef huart2;
+
+uint16_t adcval;       // ADC value
+char msg[20];          // UART message buffer
+
+
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_ADC1_Init(void);
+static void MX_USART2_UART_Init(void);
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+
+    MX_GPIO_Init();
+    MX_ADC1_Init();
+    MX_USART2_UART_Init();
+
+    // Calibrate ADC once before entering main loop
+    HAL_ADCEx_Calibration_Start(&hadc1);
+
+    while (1)
+    {
+        // Start ADC conversion
+        HAL_ADC_Start(&hadc1);
+
+        // Wait for conversion to complete
+        HAL_ADC_PollForConversion(&hadc1, 20);
+
+        // Read ADC value
+        adcval = HAL_ADC_GetValue(&hadc1);
+
+        // Prepare message to send via UART
+        sprintf(msg, "ADC: %d\r\n", adcval);
+
+        // Transmit ADC value over UART
+        HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+        // Delay 0.5 second before next reading
+        HAL_Delay(500);
+    }
+}
+
+
+void SystemClock_Config(void)
+{
+    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+    RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+    HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1);
+
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+    RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
+    RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) { Error_Handler(); }
+
+    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1;
+    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK) { Error_Handler(); }
+
+    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2 | RCC_PERIPHCLK_ADC;
+    PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
+    PeriphClkInit.AdcClockSelection = RCC_ADCCLKSOURCE_SYSCLK;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK) { Error_Handler(); }
+}
+
+
+static void MX_ADC1_Init(void)
+{
+    ADC_ChannelConfTypeDef sConfig = {0};
+
+    hadc1.Instance = ADC1;
+    hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
+    hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+    hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+    hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+    hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+    hadc1.Init.LowPowerAutoWait = DISABLE;
+    hadc1.Init.LowPowerAutoPowerOff = DISABLE;
+    hadc1.Init.ContinuousConvMode = ENABLE;
+    hadc1.Init.NbrOfConversion = 1;
+    hadc1.Init.DiscontinuousConvMode = DISABLE;
+    hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+    hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+    hadc1.Init.DMAContinuousRequests = DISABLE;
+    hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+    hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_1CYCLE_5;
+    hadc1.Init.SamplingTimeCommon2 = ADC_SAMPLETIME_1CYCLE_5;
+    hadc1.Init.OversamplingMode = DISABLE;
+    hadc1.Init.TriggerFrequencyMode = ADC_TRIGGER_FREQ_HIGH;
+    if (HAL_ADC_Init(&hadc1) != HAL_OK) { Error_Handler(); }
+
+    // Configure ADC channel 0
+    sConfig.Channel = ADC_CHANNEL_0;
+    sConfig.Rank = ADC_REGULAR_RANK_1;
+    sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
+    if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) { Error_Handler(); }
+}
+
+
+static void MX_USART2_UART_Init(void)
+{
+    huart2.Instance = USART2;
+    huart2.Init.BaudRate = 115200;
+    huart2.Init.WordLength = UART_WORDLENGTH_8B;
+    huart2.Init.StopBits = UART_STOPBITS_1;
+    huart2.Init.Parity = UART_PARITY_NONE;
+    huart2.Init.Mode = UART_MODE_TX_RX;
+    huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+    huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+    huart2.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+    huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+    if (HAL_UART_Init(&huart2) != HAL_OK) { Error_Handler(); }
+    HAL_UARTEx_SetTxFifoThreshold(&huart2, UART_TXFIFO_THRESHOLD_1_8);
+    HAL_UARTEx_SetRxFifoThreshold(&huart2, UART_RXFIFO_THRESHOLD_1_8);
+    HAL_UARTEx_DisableFifoMode(&huart2);
+}
+
+
+static void MX_GPIO_Init(void)
+{
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+}
+
+
+void Error_Handler(void)
+{
+    __disable_irq();
+    while (1) {}
+}
+
+```
 
  
 
-## Result :
+
  
 ## Output  :
 
 
 
+<img width="1623" height="942" alt="image" src="https://github.com/user-attachments/assets/584cfc3f-b763-48a2-9c37-ebac15dd58d5" />
 
 
 
-****
+
+
+![WhatsApp Image 2025-11-17 at 13 50 58_b4b5e8d1](https://github.com/user-attachments/assets/a1cc6bb9-3922-499a-8d5f-8e63503e7504)
+
+
+
+
+
+![ss3](https://github.com/user-attachments/assets/abd6710c-d56a-4a19-9e2b-b49857a22534)
+
+
+
+
+## Result:
+Thus, the analog sensor was successfully interfaced with the STM32 Nucleo board using the ADC channel, and the sensor's analog values were accurately read and displayed on the serial monitor.
+
+
